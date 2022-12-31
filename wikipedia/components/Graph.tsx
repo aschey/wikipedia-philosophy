@@ -1,18 +1,39 @@
 import ReactForceGraph3d from "react-force-graph-3d";
 import SpriteText from "three-spritetext";
+import AsyncSelect from "react-select/async";
+import { zip } from "lodash";
+
+const findArticles = async (inputValue: string) => {
+  const res = await fetch(
+    `https://en.wikipedia.org/w/api.php?action=opensearch&search=${inputValue}&limit=5&format=json&origin=*`
+  );
+  const data = await res.json();
+  return zip(data[1], data[3]).map(([title, url]) => ({
+    label: title,
+    value: url,
+  }));
+};
 
 export const Graph = () => {
   return (
-    <ReactForceGraph3d
-      graphData={data}
-      nodeAutoColorBy="group"
-      nodeThreeObject={(node: { id: string | undefined; color: string }) => {
-        const sprite = new SpriteText(node.id);
-        sprite.color = node.color;
-        sprite.textHeight = 8;
-        return sprite;
-      }}
-    />
+    <>
+      <AsyncSelect
+        cacheOptions
+        defaultOptions={[]}
+        loadOptions={findArticles}
+      />
+      <ReactForceGraph3d
+        graphData={data}
+        nodeAutoColorBy="group"
+        //  numDimensions={2}
+        nodeThreeObject={(node: { id: string | undefined; color: string }) => {
+          const sprite = new SpriteText(node.id);
+          sprite.color = node.color;
+          sprite.textHeight = 8;
+          return sprite;
+        }}
+      />
+    </>
   );
 };
 
