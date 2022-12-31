@@ -10,7 +10,7 @@ const findArticles = async (inputValue: string) => {
   const data = await res.json();
   return zip(data[1], data[3]).map(([title, url]) => ({
     label: title,
-    value: url,
+    value: title,
   }));
 };
 
@@ -21,6 +21,19 @@ export const Graph = () => {
         cacheOptions
         defaultOptions={[]}
         loadOptions={findArticles}
+        onChange={async (e) => {
+          if (e?.value) {
+            const pageTextRes = await fetch(
+              `https://en.wikipedia.org/w/api.php?format=json&action=query&prop=revisions&titles=${e.value}&rvprop=content&rvsection=0&rvslots=*&origin=*`
+            );
+            const pageText = await pageTextRes.json();
+            const pages = pageText.query.pages;
+            const wikitext =
+              pages[Object.keys(pages)[0]].revisions[0].slots.main["*"];
+            const linkRegex = new RegExp(/\[\[([^:\]]+?)\]\]/g);
+            console.log(linkRegex.exec(wikitext));
+          }
+        }}
       />
       <ReactForceGraph3d
         graphData={data}
