@@ -29,6 +29,34 @@ const findArticles = async (inputValue: string): Promise<DropdownItem[]> => {
   }));
 };
 
+const removeParens = (text: string): string => {
+  let result = "";
+  let level = 0;
+  for (let char of text) {
+    if (char == "(") {
+      level++;
+    } else if (char == ")") {
+      level--;
+    }
+    if (level === 0) {
+      result += char;
+    }
+  }
+  console.log(result);
+  return result;
+};
+
+const extractLink = (text: string): string => {
+  const linkRegex = new RegExp(/\[\[([^:\]]+?)\]\]/g);
+  const matches = linkRegex.exec(text);
+  if (matches?.length) {
+    const match = matches[1];
+    const link = match.split("|")[0];
+    return link;
+  }
+  return "";
+};
+
 export const Graph = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -47,15 +75,17 @@ export const Graph = () => {
             );
             const pageText = await pageTextRes.json();
             const pages = pageText.query.pages;
-            const wikitext =
-              pages[Object.keys(pages)[0]].revisions[0].slots.main["*"];
-            const linkRegex = new RegExp(/\[\[([^:\]]+?)\]\]/g);
-            const matches = linkRegex.exec(wikitext);
-            if (matches?.length) {
-              setNodes((nodes) => [...nodes, { id: matches[1] }]);
+            let wikitext = pages[Object.keys(pages)[0]].revisions[0].slots.main[
+              "*"
+            ] as string;
+            wikitext = removeParens(wikitext.split("\n\n")[1]);
+
+            const link = extractLink(wikitext);
+            if (link.length) {
+              setNodes((nodes) => [...nodes, { id: link }]);
               setLinks((links) => [
                 ...links,
-                { source: e.value, target: matches[1] },
+                { source: e.value, target: link },
               ]);
             }
           }
