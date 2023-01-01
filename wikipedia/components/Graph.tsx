@@ -83,7 +83,7 @@ const trimStart = (text: string): string => {
 };
 
 export const Graph = () => {
-  const [nodes, setNodes] = useState<Node[]>([]);
+  const [nodes, setNodes] = useState<Map<string, Node>>(new Map());
   const [links, setLinks] = useState<Link[]>([]);
 
   const addNode = async (id: string) => {
@@ -101,9 +101,14 @@ export const Graph = () => {
     const link = extractLink(wikitext);
     if (link.length) {
       if (id.toLowerCase() != "philosophy") {
-        setNodes((nodes) => [...nodes, { id: link }]);
-        setLinks((links) => [...links, { source: id, target: link }]);
-        addNode(link);
+        if (!nodes.has(link)) {
+          nodes.set(link, { id: link });
+          setNodes(new Map(nodes));
+          setLinks((links) => [...links, { source: id, target: link }]);
+          addNode(link);
+        } else {
+          setLinks((links) => [...links, { source: id, target: link }]);
+        }
       }
     }
   };
@@ -116,13 +121,16 @@ export const Graph = () => {
         loadOptions={findArticles}
         onChange={async (e) => {
           if (e?.value) {
-            setNodes((nodes) => [...nodes, { id: e.value }]);
-            await addNode(e.value);
+            if (!nodes.has(e.value)) {
+              nodes.set(e.value, { id: e.value });
+              setNodes(new Map(nodes));
+              await addNode(e.value);
+            }
           }
         }}
       />
       <ReactForceGraph3d
-        graphData={{ nodes, links }}
+        graphData={{ nodes: Array.from(nodes.values()), links }}
         nodeAutoColorBy="group"
         //  numDimensions={2}
         nodeThreeObject={(node: { id: string | undefined; color: string }) => {
