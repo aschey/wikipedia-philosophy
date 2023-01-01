@@ -32,7 +32,21 @@ const findArticles = async (inputValue: string): Promise<DropdownItem[]> => {
 const removeParens = (text: string): string => {
   let result = "";
   let level = 0;
-  for (let char of text) {
+  let inLink = false;
+  for (let i = 0; i < text.length; i++) {
+    let char = text[i];
+    if (level == 0 && char == "[" && i < text.length && text[i + 1] == "[") {
+      inLink = true;
+    }
+
+    if (inLink) {
+      if (char == "]" && i > 0 && text[i - 1] == "]") {
+        inLink = false;
+      }
+      result += char;
+      continue;
+    }
+
     if (char == "(") {
       level++;
     } else if (char == ")") {
@@ -42,7 +56,7 @@ const removeParens = (text: string): string => {
       result += char;
     }
   }
-  console.log(result);
+
   return result;
 };
 
@@ -57,9 +71,42 @@ const extractLink = (text: string): string => {
   return "";
 };
 
+const trimStart = (text: string): string => {
+  const lines = text.split("\n");
+  const alphanumericRegex = new RegExp(/[a-zA-Z0-9']/);
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].length && alphanumericRegex.exec(lines[i][0])?.length) {
+      return lines.slice(i).join("\n");
+    }
+  }
+  return "";
+};
+
 export const Graph = () => {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
+
+  const addNode = async (id: string) => {
+    const pageTextRes = await fetch(
+      `https://en.wikipedia.org/w/api.php?format=json&action=query&prop=revisions&titles=${id}&rvprop=content&rvsection=0&rvslots=*&origin=*&redirects=1`
+    );
+    const pageText = await pageTextRes.json();
+    const pages = pageText.query.pages;
+    let wikitext = pages[Object.keys(pages)[0]].revisions[0].slots.main[
+      "*"
+    ] as string;
+    console.log(wikitext);
+    wikitext = removeParens(trimStart(wikitext));
+
+    const link = extractLink(wikitext);
+    if (link.length) {
+      if (id.toLowerCase() != "philosophy") {
+        setNodes((nodes) => [...nodes, { id: link }]);
+        setLinks((links) => [...links, { source: id, target: link }]);
+        addNode(link);
+      }
+    }
+  };
 
   return (
     <>
@@ -70,24 +117,7 @@ export const Graph = () => {
         onChange={async (e) => {
           if (e?.value) {
             setNodes((nodes) => [...nodes, { id: e.value }]);
-            const pageTextRes = await fetch(
-              `https://en.wikipedia.org/w/api.php?format=json&action=query&prop=revisions&titles=${e.value}&rvprop=content&rvsection=0&rvslots=*&origin=*&redirects=1`
-            );
-            const pageText = await pageTextRes.json();
-            const pages = pageText.query.pages;
-            let wikitext = pages[Object.keys(pages)[0]].revisions[0].slots.main[
-              "*"
-            ] as string;
-            wikitext = removeParens(wikitext.split("\n\n")[1]);
-
-            const link = extractLink(wikitext);
-            if (link.length) {
-              setNodes((nodes) => [...nodes, { id: link }]);
-              setLinks((links) => [
-                ...links,
-                { source: e.value, target: link },
-              ]);
-            }
+            await addNode(e.value);
           }
         }}
       />
