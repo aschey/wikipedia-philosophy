@@ -131,18 +131,22 @@ const cleanComments = (text: string) => {
   return text.replaceAll(commentRegex, "");
 };
 
-const extractLink = async (text: string): Promise<WikiLink> => {
+const extractLinks = async (
+  text: string,
+  maxLinks: number
+): Promise<WikiLink[]> => {
   const linkRegex = new RegExp(/\[\[([^\]]+?)\]\]/g);
+  let links = [];
   let matches;
-  while ((matches = linkRegex.exec(text))) {
+  while (links.length < maxLinks && (matches = linkRegex.exec(text))) {
     const match = matches[1];
     const link = match.split("|")[0];
     const wikilink = await getLink(link, 0);
     if (wikilink) {
-      return wikilink;
+      links.push(wikilink);
     }
   }
-  return { id: "", wikitext: "" };
+  return links;
 };
 
 const trimStart = (text: string): string => {
@@ -198,6 +202,7 @@ export const Graph = () => {
   const [nodeMap, setNodeMap] = useState<Map<string, Node>>(new Map());
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(false);
+  const [numLinks, setNumLinks] = useState(1);
 
   const addNode = async (article: WikiLink, section: number) => {
     debugger;
@@ -207,45 +212,56 @@ export const Graph = () => {
     wikitext = cleanParens(wikitext);
     wikitext = cleanExtraLinks("File:", wikitext);
     wikitext = cleanExtraLinks("Image:", wikitext);
+    wikitext = cleanExtraLinks("#", wikitext);
     if (section === 0) {
       wikitext = trimStart(wikitext);
     }
 
-    const link = await extractLink(wikitext);
-    if (!link.id.length) {
+    const links = await extractLinks(wikitext, numLinks);
+    if (links.length === 0) {
       const wikilink = await getLink(article.id, section + 1);
       if (wikilink) {
         await addNode(wikilink, section + 1);
       }
     }
 
-    if (link.id.length) {
-      setLoading(true);
-      await sleep(100);
-      if (!nodeMap.has(link.id)) {
-        nodeMap.set(link.id, { id: link.id });
-        setNodeMap(new Map(nodeMap));
-        setLinks((links) => [
-          ...links,
-          { source: article.id, target: link.id },
-        ]);
-        if (link.id != "Philosophy") {
-          addNode(link, 0);
+    for (let link of links) {
+      if (link.id.length) {
+        setLoading(true);
+        await sleep(100);
+        if (!nodeMap.has(link.id)) {
+          nodeMap.set(link.id, { id: link.id });
+          setNodeMap(new Map(nodeMap));
+          setLinks((links) => [
+            ...links,
+            { source: article.id, target: link.id },
+          ]);
+          await addNode(link, 0);
+          return;
+          // if (link.id != "Philosophy") {
+          //   addNode(link, 0);
+          // } else {
+          //   setLoading(false);
+          // }
         } else {
+          setLinks((links) => [
+            ...links,
+            { source: article.id, target: link.id },
+          ]);
           setLoading(false);
         }
-      } else {
-        setLinks((links) => [
-          ...links,
-          { source: article.id, target: link.id },
-        ]);
-        setLoading(false);
       }
     }
   };
 
   return (
     <>
+      <input
+        type="number"
+        style={{ width: "25px", marginRight: "5px" }}
+        value={numLinks}
+        onChange={(e) => setNumLinks(parseInt(e.target.value))}
+      />
       <button
         disabled={loading}
         onClick={async () => {
@@ -264,6 +280,14 @@ export const Graph = () => {
         }}
       >
         Random
+      </button>
+      <button
+        onClick={() => {
+          setNodeMap(new Map());
+          setLinks([]);
+        }}
+      >
+        Clear
       </button>
       <AsyncSelect<DropdownItem>
         cacheOptions
