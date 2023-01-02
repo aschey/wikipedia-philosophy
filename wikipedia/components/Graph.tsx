@@ -41,6 +41,36 @@ const findArticles = async (inputValue: string): Promise<DropdownItem[]> => {
   }));
 };
 
+const cleanExtraLinks = (linkKind: string, text: string): string => {
+  let result = "";
+  let level = 0;
+
+  let i = 0;
+  while (i < text.length) {
+    if (text.slice(i, i + 2 + linkKind.length) == "[[" + linkKind) {
+      i += 2 + linkKind.length;
+      level++;
+    } else if (level > 0 && text.slice(i, i + 2) == "[[") {
+      i += 2;
+      level++;
+    } else if (
+      level > 0 &&
+      i < text.length - 1 &&
+      text[i] == "]" &&
+      text[i + 1] == "]"
+    ) {
+      i += 2;
+      level--;
+    } else {
+      if (level == 0) {
+        result += text[i];
+      }
+      i++;
+    }
+  }
+  return result;
+};
+
 const cleanParens = (text: string): string => {
   let result = "";
   let level = 0;
@@ -120,19 +150,19 @@ const trimStart = (text: string): string => {
   const alphanumericRegex = new RegExp(/[a-zA-Z0-9'"]/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
     if (
       line.length &&
       !line.endsWith("<br>") &&
-      ((alphanumericRegex.exec(line[0])?.length ?? 0 > 0) ||
-        (line.startsWith("[[") &&
-          !line.startsWith("[[File:") &&
-          !line.startsWith("[[Image:")))
+      (alphanumericRegex.exec(line[0])?.length ?? 0 > 0)
     ) {
       return lines.slice(i).join("\n");
     }
   }
   return "";
 };
+
+const sleep = (millis: number) => new Promise((p) => setTimeout(p, millis));
 
 const getLink = async (
   id: string,
@@ -171,6 +201,8 @@ export const Graph = () => {
     wikitext = cleanComments(wikitext);
     wikitext = cleanBlocks(wikitext);
     wikitext = cleanParens(wikitext);
+    wikitext = cleanExtraLinks("File:", wikitext);
+    wikitext = cleanExtraLinks("Image:", wikitext);
     if (section === 0) {
       wikitext = trimStart(wikitext);
     }
@@ -184,6 +216,7 @@ export const Graph = () => {
     }
 
     if (link.id.length) {
+      await sleep(100);
       if (!nodes.has(link.id)) {
         nodes.set(link.id, { id: link.id });
         setNodes(new Map(nodes));
