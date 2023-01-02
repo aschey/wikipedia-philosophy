@@ -127,7 +127,7 @@ const cleanBlocks = (text: string): string => {
 };
 
 const cleanComments = (text: string) => {
-  const commentRegex = new RegExp(/<!--([^(-->)]+)-->/gs);
+  const commentRegex = new RegExp(/<!--((?!<--).)*?-->/gs);
   return text.replaceAll(commentRegex, "");
 };
 
@@ -183,18 +183,21 @@ const getLink = async (
     return undefined;
   }
   let wikitext = page.revisions[0].slots.main["*"] as string;
-  if (pageText?.query?.normalized) {
-    return { id: pageText.query.normalized[0].to, wikitext };
-  }
+  // Redirect should take precedence over normalized
   if (pageText?.query?.redirects) {
     return { id: pageText.query.redirects[0].to, wikitext };
   }
+  if (pageText?.query?.normalized) {
+    return { id: pageText.query.normalized[0].to, wikitext };
+  }
+
   return { id, wikitext };
 };
 
 export const Graph = () => {
-  const [nodes, setNodes] = useState<Map<string, Node>>(new Map());
+  const [nodeMap, setNodeMap] = useState<Map<string, Node>>(new Map());
   const [links, setLinks] = useState<Link[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const addNode = async (article: WikiLink, section: number) => {
     debugger;
@@ -217,22 +220,26 @@ export const Graph = () => {
     }
 
     if (link.id.length) {
+      setLoading(true);
       await sleep(100);
-      if (!nodes.has(link.id)) {
-        nodes.set(link.id, { id: link.id });
-        setNodes(new Map(nodes));
+      if (!nodeMap.has(link.id)) {
+        nodeMap.set(link.id, { id: link.id });
+        setNodeMap(new Map(nodeMap));
         setLinks((links) => [
           ...links,
           { source: article.id, target: link.id },
         ]);
         if (link.id != "Philosophy") {
           addNode(link, 0);
+        } else {
+          setLoading(false);
         }
       } else {
         setLinks((links) => [
           ...links,
           { source: article.id, target: link.id },
         ]);
+        setLoading(false);
       }
     }
   };
@@ -240,14 +247,16 @@ export const Graph = () => {
   return (
     <>
       <button
+        disabled={loading}
         onClick={async () => {
+          setLoading(true);
           const randomTitle = await loadRandomTitle();
           console.log("RANDOM", randomTitle);
           const wikilink = await getLink(randomTitle, 0);
           if (wikilink) {
-            if (!nodes.has(wikilink?.id)) {
-              nodes.set(randomTitle, { id: wikilink.id });
-              setNodes(new Map(nodes));
+            if (!nodeMap.has(wikilink?.id)) {
+              nodeMap.set(randomTitle, { id: wikilink.id });
+              setNodeMap(new Map(nodeMap));
 
               await addNode(wikilink, 0);
             }
@@ -264,9 +273,9 @@ export const Graph = () => {
           if (e?.value) {
             const wikilink = await getLink(e.value, 0);
             if (wikilink) {
-              if (!nodes.has(wikilink.id)) {
-                nodes.set(wikilink.id, { id: wikilink.id });
-                setNodes(new Map(nodes));
+              if (!nodeMap.has(wikilink.id)) {
+                nodeMap.set(wikilink.id, { id: wikilink.id });
+                setNodeMap(new Map(nodeMap));
 
                 await addNode(wikilink, 0);
               }
@@ -275,12 +284,12 @@ export const Graph = () => {
         }}
       />
       <ReactForceGraph3d
-        graphData={{ nodes: Array.from(nodes.values()), links }}
+        graphData={{ nodes: Array.from(nodeMap.values()), links }}
         nodeAutoColorBy="group"
         linkDirectionalArrowLength={3.5}
         linkDirectionalArrowRelPos={1}
-        linkCurvature={0.1}
-        //  numDimensions={2}
+        linkCurvature={0}
+        //numDimensions={2}
         nodeThreeObject={(node: { id: string | undefined; color: string }) => {
           const sprite = new SpriteText(node.id);
           sprite.color = node.color;
