@@ -2,6 +2,7 @@ import ReactForceGraph3d from "react-force-graph-3d";
 import SpriteText from "three-spritetext";
 import AsyncSelect from "react-select/async";
 import { useState } from "react";
+import { useResizeDetector } from "react-resize-detector";
 
 interface Node {
   id: string;
@@ -203,6 +204,7 @@ export const Graph = () => {
   const [links, setLinks] = useState<Link[]>([]);
   const [loading, setLoading] = useState(false);
   const [numLinks, setNumLinks] = useState(1);
+  const { width, height, ref } = useResizeDetector();
 
   const addNode = async (article: WikiLink, section: number) => {
     debugger;
@@ -255,7 +257,7 @@ export const Graph = () => {
   };
 
   return (
-    <>
+    <div style={{ height: "96vh" }} ref={ref}>
       <input
         type="number"
         style={{ width: "25px", marginRight: "5px" }}
@@ -307,20 +309,26 @@ export const Graph = () => {
           }
         }}
       />
+
       <ReactForceGraph3d
+        width={width}
+        height={height ? height - 75 : undefined}
         graphData={{ nodes: Array.from(nodeMap.values()), links }}
         nodeAutoColorBy="group"
         linkDirectionalArrowLength={3.5}
         linkDirectionalArrowRelPos={1}
         linkCurvature={0}
-        //numDimensions={2}
+        numDimensions={2}
         nodeThreeObject={(node: { id: string | undefined; color: string }) => {
           const sprite = new SpriteText(node.id);
           sprite.color = node.color;
           sprite.textHeight = 8;
+          sprite.backgroundColor = "rgba(50,50,50,0.8)";
+          sprite.borderRadius = 10;
+          sprite.padding = 5;
           return sprite;
         }}
       />
-    </>
+    </div>
   );
 };
