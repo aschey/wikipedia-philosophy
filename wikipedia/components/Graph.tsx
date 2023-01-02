@@ -147,14 +147,15 @@ const extractLink = async (text: string): Promise<WikiLink> => {
 
 const trimStart = (text: string): string => {
   const lines = text.split("\n");
-  const alphanumericRegex = new RegExp(/[a-zA-Z0-9'"]/);
+  const allowedLineStartRegex = new RegExp(/[a-zA-Z0-9'"]/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
     if (
       line.length &&
       !line.endsWith("<br>") &&
-      (alphanumericRegex.exec(line[0])?.length ?? 0 > 0)
+      ((allowedLineStartRegex.exec(line[0])?.length ?? 0 > 0) ||
+        line.startsWith("[["))
     ) {
       return lines.slice(i).join("\n");
     }
