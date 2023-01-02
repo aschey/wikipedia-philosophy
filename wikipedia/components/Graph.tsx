@@ -315,8 +315,7 @@ export const Graph = () => {
         height={height ? height - 75 : undefined}
         graphData={{ nodes: Array.from(nodeMap.values()), links }}
         nodeAutoColorBy="group"
-        linkDirectionalArrowLength={3.5}
-        linkDirectionalArrowRelPos={1}
+        linkDirectionalArrowLength={6}
         linkCurvature={0}
         numDimensions={2}
         nodeThreeObject={(node: { id: string | undefined; color: string }) => {
