@@ -96,6 +96,11 @@ const cleanBlocks = (text: string): string => {
   return result;
 };
 
+const cleanComments = (text: string) => {
+  const commentRegex = new RegExp(/<!--([^(-->)]+)-->/gs);
+  return text.replaceAll(commentRegex, "");
+};
+
 const extractLink = async (text: string): Promise<WikiLink> => {
   const linkRegex = new RegExp(/\[\[([^\]]+?)\]\]/g);
   let matches;
@@ -139,6 +144,9 @@ const getLink = async (
   );
   const pageText = await pageTextRes.json();
   const pages = pageText.query.pages;
+  if (!pages) {
+    return undefined;
+  }
   const page = pages[Object.keys(pages)[0]];
   if (!page.revisions) {
     return undefined;
@@ -159,7 +167,10 @@ export const Graph = () => {
 
   const addNode = async (article: WikiLink, section: number) => {
     debugger;
-    let wikitext = cleanParens(cleanBlocks(article.wikitext));
+    let wikitext = article.wikitext;
+    wikitext = cleanComments(wikitext);
+    wikitext = cleanBlocks(wikitext);
+    wikitext = cleanParens(wikitext);
     if (section === 0) {
       wikitext = trimStart(wikitext);
     }
@@ -198,11 +209,12 @@ export const Graph = () => {
         onClick={async () => {
           const randomTitle = await loadRandomTitle();
           console.log("RANDOM", randomTitle);
-          if (!nodes.has(randomTitle)) {
-            nodes.set(randomTitle, { id: randomTitle });
-            setNodes(new Map(nodes));
-            const wikilink = await getLink(randomTitle, 0);
-            if (wikilink) {
+          const wikilink = await getLink(randomTitle, 0);
+          if (wikilink) {
+            if (!nodes.has(wikilink?.id)) {
+              nodes.set(randomTitle, { id: wikilink.id });
+              setNodes(new Map(nodes));
+
               await addNode(wikilink, 0);
             }
           }
@@ -216,11 +228,12 @@ export const Graph = () => {
         loadOptions={findArticles}
         onChange={async (e) => {
           if (e?.value) {
-            if (!nodes.has(e.value)) {
-              nodes.set(e.value, { id: e.value });
-              setNodes(new Map(nodes));
-              const wikilink = await getLink(e.value, 0);
-              if (wikilink) {
+            const wikilink = await getLink(e.value, 0);
+            if (wikilink) {
+              if (!nodes.has(wikilink.id)) {
+                nodes.set(wikilink.id, { id: wikilink.id });
+                setNodes(new Map(nodes));
+
                 await addNode(wikilink, 0);
               }
             }
