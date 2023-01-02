@@ -1,11 +1,13 @@
 import ReactForceGraph3d from "react-force-graph-3d";
 import SpriteText from "three-spritetext";
 import AsyncSelect from "react-select/async";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useResizeDetector } from "react-resize-detector";
 
 interface Node {
   id: string;
+  showText: boolean;
+  name: string;
 }
 
 interface Link {
@@ -207,7 +209,6 @@ export const Graph = () => {
   const { width, height, ref } = useResizeDetector();
 
   const addNode = async (article: WikiLink, section: number) => {
-    debugger;
     let wikitext = article.wikitext;
     wikitext = cleanComments(wikitext);
     wikitext = cleanBlocks(wikitext);
@@ -232,7 +233,13 @@ export const Graph = () => {
         setLoading(true);
         await sleep(100);
         if (!nodeMap.has(link.id)) {
-          nodeMap.set(link.id, { id: link.id });
+          const newNode = { id: link.id, name: link.id, showText: true };
+          setTimeout(() => {
+            newNode.showText = false;
+            setNodeMap((m) => new Map(m));
+          }, 5000);
+
+          nodeMap.set(link.id, newNode);
           setNodeMap(new Map(nodeMap));
           setLinks((links) => [
             ...links,
@@ -273,7 +280,11 @@ export const Graph = () => {
           const wikilink = await getLink(randomTitle, 0);
           if (wikilink) {
             if (!nodeMap.has(wikilink?.id)) {
-              nodeMap.set(randomTitle, { id: wikilink.id });
+              nodeMap.set(randomTitle, {
+                id: wikilink.id,
+                name: wikilink.id,
+                showText: true,
+              });
               setNodeMap(new Map(nodeMap));
 
               await addNode(wikilink, 0);
@@ -300,7 +311,11 @@ export const Graph = () => {
             const wikilink = await getLink(e.value, 0);
             if (wikilink) {
               if (!nodeMap.has(wikilink.id)) {
-                nodeMap.set(wikilink.id, { id: wikilink.id });
+                nodeMap.set(wikilink.id, {
+                  id: wikilink.id,
+                  name: wikilink.id,
+                  showText: true,
+                });
                 setNodeMap(new Map(nodeMap));
 
                 await addNode(wikilink, 0);
@@ -318,7 +333,14 @@ export const Graph = () => {
         linkDirectionalArrowLength={6}
         linkCurvature={0}
         numDimensions={2}
-        nodeThreeObject={(node: { id: string | undefined; color: string }) => {
+        nodeThreeObject={(node: {
+          id: string;
+          showText: boolean;
+          color: string;
+        }) => {
+          if (!node.showText) {
+            return undefined;
+          }
           const sprite = new SpriteText(node.id);
           sprite.color = node.color;
           sprite.textHeight = 8;
