@@ -1,13 +1,10 @@
-import ReactForceGraph3d from "react-force-graph-3d";
-import SpriteText from "three-spritetext";
+import ReactForceGraph2d from "react-force-graph-2d";
 import AsyncSelect from "react-select/async";
 import { useRef, useState } from "react";
 import { useResizeDetector } from "react-resize-detector";
 
 interface Node {
   id: string;
-  showText: boolean;
-  name: string;
 }
 
 interface Link {
@@ -134,26 +131,23 @@ const cleanComments = (text: string) => {
   return text.replaceAll(commentRegex, "");
 };
 
-const extractLinks = async (
-  text: string,
-  maxLinks: number
-): Promise<WikiLink[]> => {
+const extractLinks = async function* (text: string, maxLinks: number) {
   const linkRegex = new RegExp(/\[\[([^\]]+?)\]\]/g);
-  let links = [];
   let matches;
-  while (links.length < maxLinks && (matches = linkRegex.exec(text))) {
+  let linksFound = 0;
+  while (linksFound < maxLinks && (matches = linkRegex.exec(text))) {
     const match = matches[1];
     const link = match.split("|")[0];
     const wikilink = await getLink(link, 0);
     if (wikilink) {
-      links.push(wikilink);
+      yield wikilink;
+      linksFound++;
     }
   }
-  return links;
 };
 
 const trimStart = (text: string): string => {
-  const lines = text.split("\n");
+  const lines = text.split("\n").map((t) => t.trim());
   const allowedLineStartRegex = new RegExp(/[a-zA-Z0-9'"]/);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -169,8 +163,6 @@ const trimStart = (text: string): string => {
   }
   return "";
 };
-
-const sleep = (millis: number) => new Promise((p) => setTimeout(p, millis));
 
 const getLink = async (
   id: string,
@@ -220,47 +212,37 @@ export const Graph = () => {
       wikitext = trimStart(wikitext);
     }
 
-    const links = await extractLinks(wikitext, numLinks);
-    if (links.length === 0) {
+    let linkFound = false;
+
+    for await (let link of extractLinks(wikitext, numLinks)) {
+      linkFound = true;
+      setLoading(true);
+      if (!nodeMap.has(link.id)) {
+        const newNode = { id: link.id };
+
+        nodeMap.set(link.id, newNode);
+        setNodeMap(new Map(nodeMap));
+        setLinks((links) => [
+          ...links,
+          { source: article.id, target: link.id },
+        ]);
+        await addNode(link, 0);
+        return;
+      } else {
+        setLinks((links) => [
+          ...links,
+          { source: article.id, target: link.id },
+        ]);
+      }
+    }
+
+    if (!linkFound) {
       const wikilink = await getLink(article.id, section + 1);
       if (wikilink) {
         await addNode(wikilink, section + 1);
       }
     }
-
-    for (let link of links) {
-      if (link.id.length) {
-        setLoading(true);
-        await sleep(100);
-        if (!nodeMap.has(link.id)) {
-          const newNode = { id: link.id, name: link.id, showText: true };
-          setTimeout(() => {
-            newNode.showText = false;
-            setNodeMap((m) => new Map(m));
-          }, 5000);
-
-          nodeMap.set(link.id, newNode);
-          setNodeMap(new Map(nodeMap));
-          setLinks((links) => [
-            ...links,
-            { source: article.id, target: link.id },
-          ]);
-          await addNode(link, 0);
-          return;
-          // if (link.id != "Philosophy") {
-          //   addNode(link, 0);
-          // } else {
-          //   setLoading(false);
-          // }
-        } else {
-          setLinks((links) => [
-            ...links,
-            { source: article.id, target: link.id },
-          ]);
-          setLoading(false);
-        }
-      }
-    }
+    setLoading(false);
   };
 
   return (
@@ -282,8 +264,6 @@ export const Graph = () => {
             if (!nodeMap.has(wikilink?.id)) {
               nodeMap.set(randomTitle, {
                 id: wikilink.id,
-                name: wikilink.id,
-                showText: true,
               });
               setNodeMap(new Map(nodeMap));
 
@@ -307,47 +287,64 @@ export const Graph = () => {
         defaultOptions={[]}
         loadOptions={findArticles}
         onChange={async (e) => {
+          debugger;
           if (e?.value) {
             const wikilink = await getLink(e.value, 0);
             if (wikilink) {
               if (!nodeMap.has(wikilink.id)) {
                 nodeMap.set(wikilink.id, {
                   id: wikilink.id,
-                  name: wikilink.id,
-                  showText: true,
                 });
                 setNodeMap(new Map(nodeMap));
-
-                await addNode(wikilink, 0);
               }
+              await addNode(wikilink, 0);
             }
           }
         }}
       />
 
-      <ReactForceGraph3d
+      <ReactForceGraph2d
         width={width}
         height={height ? height - 75 : undefined}
         graphData={{ nodes: Array.from(nodeMap.values()), links }}
-        nodeAutoColorBy="group"
+        backgroundColor="black"
+        linkColor={() => "#bfced6"}
+        linkDirectionalArrowColor={() => "#bfced6"}
         linkDirectionalArrowLength={6}
-        linkCurvature={0}
-        numDimensions={2}
-        nodeThreeObject={(node: {
-          id: string;
-          showText: boolean;
-          color: string;
-        }) => {
-          if (!node.showText) {
-            return undefined;
-          }
-          const sprite = new SpriteText(node.id);
-          sprite.color = node.color;
-          sprite.textHeight = 8;
-          sprite.backgroundColor = "rgba(50,50,50,0.8)";
-          sprite.borderRadius = 10;
-          sprite.padding = 5;
-          return sprite;
+        linkCurvature={0.1}
+        enableNodeDrag={false}
+        nodeCanvasObject={(node, ctx, globalScale) => {
+          const label = (node.id ?? "") as string;
+
+          const fontSize = Math.min(12 / globalScale, 24);
+          ctx.font = `${fontSize}px Sans-Serif`;
+
+          const textWidth = ctx.measureText(label).width;
+
+          ctx.beginPath();
+          ctx.ellipse(
+            node.x ?? 0,
+            node.y ?? 0,
+            textWidth / 2 + 5,
+            fontSize,
+            0,
+            0,
+            2 * Math.PI
+          );
+          ctx.fillStyle = "rgba(50,50,50,0.8)";
+
+          ctx.fill();
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#aad0e6";
+
+          ctx.fillText(label, node.x ?? 0, node.y ?? 0);
+        }}
+        nodePointerAreaPaint={(node, paintColor, ctx, globalScale) => {
+          const label = (node.id ?? "") as string;
+          const textWidth = ctx.measureText(label).width;
+          const fontSize = Math.min(12 / globalScale, 24);
+          ctx.fillRect(node.x ?? 0, node.y ?? 0, textWidth, fontSize);
         }}
       />
     </div>
