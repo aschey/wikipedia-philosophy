@@ -2,7 +2,7 @@ import dynamic from "next/dynamic";
 
 const Index = dynamic(
   async () => {
-    return (await import("../components/Graph")).Graph;
+    return (await import("../components/Graph")).ForceGraph;
   },
   { ssr: false, loading: () => <>Loading...</> }
 );

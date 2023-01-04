@@ -1,6 +1,6 @@
 import ReactForceGraph2d from "react-force-graph-2d";
 import AsyncSelect from "react-select/async";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useResizeDetector } from "react-resize-detector";
 
 interface Node {
@@ -8,8 +8,8 @@ interface Node {
 }
 
 interface Link {
-  source: string;
-  target: string;
+  source: Node;
+  target: Node;
 }
 
 interface DropdownItem {
@@ -20,6 +20,56 @@ interface DropdownItem {
 interface WikiLink {
   id: string;
   wikitext: string;
+}
+
+class Graph {
+  nodes: Node[];
+  links: Link[];
+  nodeMap: Map<string, { node: Node; rank: number }>;
+
+  constructor(source: Graph | undefined = undefined) {
+    if (source) {
+      this.nodes = [...source.nodes];
+      this.links = [...source.links];
+      this.nodeMap = new Map(source.nodeMap);
+    } else {
+      this.nodes = [];
+      this.links = [];
+      this.nodeMap = new Map();
+    }
+  }
+
+  addNode(id: string) {
+    if (!this.nodeMap.has(id)) {
+      const node = { id };
+      this.nodes.push(node);
+      this.nodeMap.set(id, { node, rank: 0 });
+    }
+  }
+
+  has(id: string): boolean {
+    return this.nodeMap.has(id);
+  }
+
+  addLink(sourceId: string, targetId: string) {
+    this.links.push({
+      source: this.nodeMap.get(sourceId)!.node,
+      target: this.nodeMap.get(targetId)!.node,
+    });
+
+    this.updateLink(targetId, new Set());
+  }
+
+  updateLink(targetId: string, visited: Set<string>) {
+    if (visited.has(targetId)) {
+      return;
+    }
+    this.nodeMap.get(targetId)!.rank++;
+    visited.add(targetId);
+    for (let link of this.links.filter((l) => l.source.id == targetId)) {
+      this.updateLink(link.target.id, visited);
+    }
+  }
 }
 
 const loadRandomTitle = async (): Promise<string> => {
@@ -193,9 +243,8 @@ const getLink = async (
   return { id, wikitext };
 };
 
-export const Graph = () => {
-  const [nodeMap, setNodeMap] = useState<Map<string, Node>>(new Map());
-  const [links, setLinks] = useState<Link[]>([]);
+export const ForceGraph = () => {
+  const [graph, setGraph] = useState(new Graph());
   const [loading, setLoading] = useState(false);
   const [numLinks, setNumLinks] = useState(1);
   const { width, height, ref } = useResizeDetector();
@@ -217,22 +266,16 @@ export const Graph = () => {
     for await (let link of extractLinks(wikitext, numLinks)) {
       linkFound = true;
       setLoading(true);
-      if (!nodeMap.has(link.id)) {
-        const newNode = { id: link.id };
+      if (!graph.has(link.id)) {
+        graph.addNode(link.id);
+        graph.addLink(article.id, link.id);
+        setGraph(new Graph(graph));
 
-        nodeMap.set(link.id, newNode);
-        setNodeMap(new Map(nodeMap));
-        setLinks((links) => [
-          ...links,
-          { source: article.id, target: link.id },
-        ]);
         await addNode(link, 0);
         return;
       } else {
-        setLinks((links) => [
-          ...links,
-          { source: article.id, target: link.id },
-        ]);
+        graph.addLink(article.id, link.id);
+        setGraph(new Graph(graph));
       }
     }
 
@@ -261,11 +304,9 @@ export const Graph = () => {
           console.log("RANDOM", randomTitle);
           const wikilink = await getLink(randomTitle, 0);
           if (wikilink) {
-            if (!nodeMap.has(wikilink?.id)) {
-              nodeMap.set(randomTitle, {
-                id: wikilink.id,
-              });
-              setNodeMap(new Map(nodeMap));
+            if (!graph.has(wikilink?.id)) {
+              graph.addNode(wikilink.id);
+              setGraph(new Graph(graph));
 
               await addNode(wikilink, 0);
             }
@@ -276,8 +317,7 @@ export const Graph = () => {
       </button>
       <button
         onClick={() => {
-          setNodeMap(new Map());
-          setLinks([]);
+          setGraph(new Graph());
         }}
       >
         Clear
@@ -291,11 +331,9 @@ export const Graph = () => {
           if (e?.value) {
             const wikilink = await getLink(e.value, 0);
             if (wikilink) {
-              if (!nodeMap.has(wikilink.id)) {
-                nodeMap.set(wikilink.id, {
-                  id: wikilink.id,
-                });
-                setNodeMap(new Map(nodeMap));
+              if (!graph.has(wikilink.id)) {
+                graph.addNode(wikilink.id);
+                setGraph(new Graph(graph));
               }
               await addNode(wikilink, 0);
             }
@@ -306,7 +344,7 @@ export const Graph = () => {
       <ReactForceGraph2d
         width={width}
         height={height ? height - 75 : undefined}
-        graphData={{ nodes: Array.from(nodeMap.values()), links }}
+        graphData={graph}
         backgroundColor="black"
         linkColor={() => "#bfced6"}
         linkDirectionalArrowColor={() => "#bfced6"}
@@ -315,7 +353,7 @@ export const Graph = () => {
         enableNodeDrag={false}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const label = (node.id ?? "") as string;
-
+          const multiplier = 1 + graph.nodeMap.get(label)!.rank * 0.01;
           const fontSize = Math.min(12 / globalScale, 24);
           ctx.font = `${fontSize}px Sans-Serif`;
 
@@ -325,18 +363,21 @@ export const Graph = () => {
           ctx.ellipse(
             node.x ?? 0,
             node.y ?? 0,
-            textWidth / 2 + 5,
-            fontSize,
+            (textWidth / 2) * multiplier + 5,
+            fontSize * multiplier,
             0,
             0,
             2 * Math.PI
           );
-          ctx.fillStyle = "rgba(50,50,50,0.8)";
+          const color = 50 + graph.nodeMap.get(label)!.rank * 1.5;
+
+          ctx.fillStyle = `rgba(${color},${color},${color},0.8)`;
 
           ctx.fill();
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
-          ctx.fillStyle = "#aad0e6";
+          const textColor = 255 - color;
+          ctx.fillStyle = `rgb(${textColor},${textColor},${textColor})`;
 
           ctx.fillText(label, node.x ?? 0, node.y ?? 0);
         }}
